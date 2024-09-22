@@ -1,0 +1,17 @@
+librosa
+munch
+pandas
+soundfile
+matplotlib
+pyyaml
+attrdict
+einops
+scipy
+transformers
+audio-diffusion-pytorch==0.0.97
+
+torch
+torchvision
+torchaudio
+
+git+https://github.com/resemble-ai/monotonic_align.git

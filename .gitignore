@@ -1,0 +1,12 @@
+LJSpeech-1.1/
+PL-BERT/
+StarGANv2_VC/
+StyleTTS/
+StyleTTS2/
+Utils/
+__pycache__/
+venv/
+vocoder.py
+vocoder_utils.py
+small_style_notext_robust_rvq_dis_half/
+!.gitignore

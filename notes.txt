@@ -1,0 +1,4 @@
+- We use the same pitch extractor F, duration extractor A,
+and decoder G as in (styletts2)
+
+use python 3.9, attrdict causes mapping issue

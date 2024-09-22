@@ -68,6 +68,8 @@ from StyleTTS.Demo.hifi_gan.vocoder import (
 from audio_diffusion_pytorch.modules import *
 from StyleTTS.Demo.hifi_gan.vocoder_utils import get_padding, init_weights
 
+from StarGANv2_VC.transforms import build_transforms, PitchShift, TimeStrech
+
 # Logging Configuration
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1870,7 +1872,8 @@ class MultiTaskModel(nn.Module):
 
         self.encoder = model
         self.mask_predictor = nn.Linear(hidden_size, num_tokens)
-        self.word_predictor = nn.Linear(hidden_size, word_embedding.shape[-1])
+        # self.word_predictor = nn.Linear(hidden_size, word_embedding.shape[-1])
+        self.word_predictor = nn.Linear(hidden_size, num_vocab)
     
     def forward(self, phonemes):
         output = self.encoder(phonemes)
@@ -2332,7 +2335,7 @@ LRELU_SLOPE = 0.1
 
 LRELU_SLOPE = 0.1
 
-word_embedding = np.load('../../../SSL_Project/embedding_pca.npy')
+# word_embedding = np.load('../../../SSL_Project/embedding_pca.npy')
 
 
 albert_base_configuration = AlbertConfig(
@@ -2346,7 +2349,8 @@ albert_base_configuration = AlbertConfig(
 model = AlbertModel(albert_base_configuration)
 bert = MultiTaskModel(model).to('cuda')
 
-checkpoint = torch.load("../../../SSL_Project/checkpoint_new/step_706000.t7", map_location='cpu')
+my_path = "StyleTTS2/Utils/PLBERT/step_1000000.t7"
+checkpoint = torch.load(my_path, map_location='cpu')
 state_dict = checkpoint['net']
 from collections import OrderedDict
 new_state_dict = OrderedDict()
@@ -2360,33 +2364,31 @@ print('Checkpoint loaded.')
 bert = bert.encoder
 
 model = build_model()
-
-
 # params = torch.load("./checkpoint_LJ_TTS_PH_E2E_real_mel_snake_sigmoidur_R_newsine_conf_tvstyle_sup_codec/val_loss_tensor(2.2759, device='cuda:0').t7", map_location='cpu')
 # params = torch.load("./checkpoint_LJ_TTS_PH_E2E_real_mel_snake_sigmoidur_R_newsine_conf_tvstyle_mask/val_loss_1.5.t7", map_location='cpu')
 # params = torch.load("./checkpoint_LJ_TTS_PH_E2E_real_mel_snake_sigmoidur_R_newsine_conf_tvstyle_sup_codec_dis_codec_ft_cheat_dis/val_loss_tensor(1.8676, device='cuda:0').t7", map_location='cpu')
-params = torch.load("./small_style_notext_robust_rvq_dis/val_loss_tensor(0.5101, device='cuda:0').t7", map_location='cpu')
+# params = torch.load("./small_style_notext_robust_rvq_dis/val_loss_tensor(0.5101, device='cuda:0').t7", map_location='cpu')
 
-opt = params['optimizer']
-params = params['net']
-for key in model:
-    if key in params:
-#         if not (key == "bert_encoder" or key == "predictor" or key == "bert"  or key == "msd" or key == "mpd"):
-            print('%s loaded' % key)
-            try:
-                model[key].load_state_dict(params[key])
-            except:
-                from collections import OrderedDict
-                state_dict = params[key]
-                new_state_dict = OrderedDict()
-                for k, v in state_dict.items():
-                    name = k[7:] # remove `module.`
-                    new_state_dict[name] = v
-                # load params
-                model[key].load_state_dict(new_state_dict, strict=False)
-        #             except:
-    #                 _load(params[key], model[key])
-_ = [model[key].eval() for key in model]
+# opt = params['optimizer']
+# params = params['net']
+# for key in model:
+#     if key in params:
+# #         if not (key == "bert_encoder" or key == "predictor" or key == "bert"  or key == "msd" or key == "mpd"):
+#             print('%s loaded' % key)
+#             try:
+#                 model[key].load_state_dict(params[key])
+#             except:
+#                 from collections import OrderedDict
+#                 state_dict = params[key]
+#                 new_state_dict = OrderedDict()
+#                 for k, v in state_dict.items():
+#                     name = k[7:] # remove `module.`
+#                     new_state_dict[name] = v
+#                 # load params
+#                 model[key].load_state_dict(new_state_dict, strict=False)
+#         #             except:
+#     #                 _load(params[key], model[key])
+# _ = [model[key].eval() for key in model]
 asr_model_copy = asr_model_copy.eval()
 F0_model_copy = F0_model_copy.eval()
 # model.prosody_encoder.load_state_dict(model.style_encoder.state_dict(), strict=False)
@@ -2535,7 +2537,7 @@ for g in optimizer.optimizers['bert'].param_groups:
     g['min_lr'] = 0
     g['weight_decay'] = 0.01
     
-optimizer.load_state_dict(opt)
+# optimizer.load_state_dict(opt)
 
 best_loss = float('inf')  # best test loss
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
@@ -2550,7 +2552,7 @@ criterion = nn.L1Loss() # F0 loss (regression)
 torch.cuda.empty_cache()
 
 
-from transforms import build_transforms, PitchShift, TimeStrech
+
 
 class TimeStrech(nn.Module):
     def __init__(self, scale):
@@ -2691,7 +2693,7 @@ def shuffle_batch(batch):
     return indices, tuple(shuffled_batch)
 
 
-mypath  ="/local/data_cache/"
+mypath  ="./data_cache/"
 
 from os import listdir
 from os.path import isfile, join
@@ -2810,356 +2812,259 @@ for epoch in range(epochs):
     
     i = 0
 #     try: 
-    while True:
-#         waves_old = batch[0]
-#         batch = [b.to(device) for b in batch[1:]]
-#         indices, batch = shuffle_batch(batch)
+    # while True:
+    device = 'cuda'
+    for i, batch in enumerate(train_dataloader):
+        waves, texts, input_lengths, mels, mel_input_length, labels, ref_mels, ref_labels, adj_mels, adj_mels_lengths, ref_texts, ref_lengths = batch
 
-#         waves = [waves_old[i] for i in indices]
-
-#         texts, input_lengths, mels, mel_input_length, labels, ref_mels, ref_labels, adj_mels, adj_mels_lengths, ref_texts, ref_lengths = batch
-
-        
-#         onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
-#         cache_file = mypath + random.choice(onlyfiles)
-#         batch = torch.load(cache_file)
-
-
-#         onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
-#         cache_file1 = mypath + random.choice(onlyfiles)
-#         if not os.path.isfile(cache_file1):
-#             onlyfiles.remove(cache_file1.replace(mypath, ""))
-#             coll += 1
-#             continue
-#         try:
-#             batch1 = torch.load(cache_file1)
-#         except:
-#             os.remove(cache_file1)
-#             continue
-            
-#         cache_file2 = mypath + random.choice(onlyfiles)
-#         if not os.path.isfile(cache_file2):
-#             onlyfiles.remove(cache_file2.replace(mypath, ""))
-#             coll += 1
-#             continue
-#         try:
-#             batch2 = torch.load(cache_file2)
-#         except:
-#             os.remove(cache_file2)
-#             continue
-        
-#         batch = merge_batches(batch1, batch2)
-
-        onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
-        cache_file = mypath + random.choice(onlyfiles)
-        try:
-            batch = torch.load(cache_file)
-        except:
-            os.remove(cache_file)
-            continue
-            
-        if len(onlyfiles) > 100 and (i + 1) % 50 != 0:
-            os.remove(cache_file)
-
-            waves = batch[0]
-            batch = batch[1:]
-            batch = [b.to(device) for b in batch]
-            texts, input_lengths, mels, mel_input_length, ref_texts, ref_lengths, adj_mels, adj_mels_lengths = batch
-        else:            
-            _, batch = next(enumerate(train_dataloader))
-            waves_old = batch[0]
-            batch = [b.to(device) for b in batch[1:]]
-            indices, batch = shuffle_batch(batch)
-
-            waves = [waves_old[i] for i in indices]
-
-            texts, input_lengths, mels, mel_input_length, labels, ref_mels, ref_labels, adj_mels, adj_mels_lengths, ref_texts, ref_lengths = batch
-        
-        if input_lengths.max() > 512 or ref_lengths.max() > 512:
-            print(input_lengths.max(), ref_lengths.max())
-            continue
-        
-        if ((input_lengths / mel_input_length).max() > 0.7 or  (ref_lengths / adj_mels_lengths).max() > 0.7):
-            print((input_lengths / mel_input_length).max(),
-                  (ref_lengths / adj_mels_lengths).max())
-            continue
-
-        mels_new = []
-        texts_new = []
-
-        for bib in range(len(mel_input_length)):
-            if (input_lengths[bib] + ref_lengths[bib]) > 512 or (mel_input_length[bib] + adj_mels_lengths[bib]) // 80 > 21:
-                mels_new.append(mels[bib, :, :mel_input_length[bib]])
-                texts_new.append(texts[bib, :input_lengths[bib]])
-            else:
-                text = ''.join([token_dict[int(k)] for k in texts[bib, :input_lengths[bib]]]).replace('$', '').strip()
-                adj_text = ''.join([token_dict[int(k)] for k in ref_texts[bib, :ref_lengths[bib]]]).replace('$', '').strip()
-                text = adj_text + " " + text
-                text = val_dataloader.dataset.text_cleaner(text)
-                text.insert(0, 0)
-                text.append(0)
-                text = torch.LongTensor(text)
-
-                mel = torch.cat([adj_mels[bib, :, :adj_mels_lengths[bib]], 
-                                mels[bib, :, :mel_input_length[bib]]
-                                ], dim=-1)
-                mels_new.append(mel)
-                texts_new.append(text)
-
-        mels = torch.zeros(mels.size(0), mels.size(1), max([m.size(-1) for m in mels_new]))
-        texts  = torch.zeros(texts.size(0), max([m.size(-1) for m in texts_new]))
-        
-        for bib in range(len(mel_input_length)):
-            mel_input_length[bib] = mels_new[bib].size(-1)
-            input_lengths[bib] = texts_new[bib].size(-1)
-
-            mels[bib, :, :mel_input_length[bib]] = mels_new[bib]
-            texts[bib, :input_lengths[bib]] = texts_new[bib]
-        mels = mels.to(adj_mels.device)
-        texts = texts.to(adj_mels.device).long()
-        
-        if ((input_lengths / mel_input_length).max() > 0.7 or  (ref_lengths / adj_mels_lengths).max() > 0.7):
-            print((input_lengths / mel_input_length).max(),
-                  (ref_lengths / adj_mels_lengths).max())
-            continue
-                
-        with torch.no_grad():
-            mask = length_to_mask(adj_mels_lengths // (2 ** asr_model.n_down)).to('cuda')
-            mel_mask = length_to_mask(adj_mels_lengths).to('cuda')
-            text_mask = length_to_mask(ref_lengths).to(ref_texts.device)
-
-            _, _, s2s_attn = asr_model(adj_mels, mask, ref_texts)
-            s2s_attn = s2s_attn.transpose(-1, -2)
-            s2s_attn = s2s_attn[..., 1:]
-            s2s_attn = s2s_attn.transpose(-1, -2)
-
-            mask_ST = mask_from_lens(s2s_attn, ref_lengths, adj_mels_lengths // (2 ** asr_model.n_down))
-            s2s_attn_mono = maximum_path(s2s_attn, mask_ST)
-
-            # encode
-            d_gt = s2s_attn_mono.sum(axis=-1).detach()
-
-            real_norm = log_norm(adj_mels.unsqueeze(1)).squeeze(1)
-
-            F0_real = F0_model(adj_mels.unsqueeze(1), adj_mels_lengths.cpu())
-
-            real_norm.masked_fill_(mel_mask, 0.0)
-            F0_real.masked_fill_(mel_mask, 0.0)
-
-        position = torch.stack([torch.range(0, ref_texts.size(-1) - 1)] * ref_texts.size(0)).to('cuda')
-        t_en = model.text_embedding(position.long()).transpose(-1, -2)
-
-#         if np.random.rand() < 0.5:
-#             asr = (t_en @ s2s_attn)
-#         else:
-#             asr = (t_en @ s2s_attn_mono)
-
-        asr = (t_en @ s2s_attn_mono)
-        asr_ref = torch.cat([asr, 
-                                 F.avg_pool1d(real_norm, kernel_size=2).unsqueeze(1), 
-                                 F.avg_pool1d(F0_real, kernel_size=2).unsqueeze(1)
-                                ], axis=1)
-
-        with torch.no_grad():
-            mask = length_to_mask(mel_input_length // (2 ** asr_model.n_down)).to('cuda')
-            mel_mask = length_to_mask(mel_input_length).to('cuda')
-            text_mask = length_to_mask(input_lengths).to(texts.device)
-
-            _, _, s2s_attn = asr_model(mels, mask, texts)
-            s2s_attn = s2s_attn.transpose(-1, -2)
-            s2s_attn = s2s_attn[..., 1:]
-            s2s_attn = s2s_attn.transpose(-1, -2)
-
-            mask_ST = mask_from_lens(s2s_attn, input_lengths, mel_input_length // (2 ** asr_model.n_down))
-            s2s_attn_mono = maximum_path(s2s_attn, mask_ST)
-
-            # encode
-            d_gt = s2s_attn_mono.sum(axis=-1).detach()
-
-            real_norm = log_norm(mels.unsqueeze(1)).squeeze(1)
-
-            F0_real = F0_model(mels.unsqueeze(1), mel_input_length.cpu())
-
-            real_norm.masked_fill_(mel_mask, 0.0)
-            F0_real.masked_fill_(mel_mask, 0.0)
-
-        position = torch.stack([torch.range(0, texts.size(-1) - 1)] * texts.size(0)).to('cuda')
-        t_en = model.text_embedding(position.long()).transpose(-1, -2)
-
-#         if np.random.rand() < 0.5:
-#             asr = (t_en @ s2s_attn)
-#         else:
-#             asr = (t_en @ s2s_attn_mono)
-
-        asr = (t_en @ s2s_attn_mono)
-        asr_real = torch.cat([asr, 
-                                 F.avg_pool1d(real_norm, kernel_size=2).unsqueeze(1), 
-                                 F.avg_pool1d(F0_real, kernel_size=2).unsqueeze(1)
-                                ], axis=1)
-        
-        
-        if bool(random.getrandbits(1)):
-#             # compute prosodic style
-#             if bool(random.getrandbits(1)):
-#                 min_length = (adj_mels_lengths // 2).min()
-#                 asr_new = torch.zeros_like(asr_ref).to(asr_ref.device)
-#                 bid = 0
-#                 for a, length in zip (asr_ref, adj_mels_lengths // 2):
-#                     a = a[:, :length]
-#                     asr_m = random_mask_tokens(a, min_length)
-#                     asr_new[bid, :, :length] = asr_m
-#                     bid += 1
-#                 h_cont = model.predictor_encoder(asr_ref, adj_mels_lengths // 2)
-#             else:
-            min_length = (mel_input_length // 2).min()
-            asr_new = torch.zeros_like(asr_real).to(asr_real.device)
-            bid = 0
-            for a, length in zip (asr_real, mel_input_length // 2):
-                a = a[:, :length]
-                asr_m = random_mask_tokens(a, min_length)
-                asr_new[bid, :, :length] = asr_m
-                bid += 1
-            h_cont = model.predictor_encoder(asr_new, mel_input_length // 2)
-        else:
-            flag = False
-            mel_len = min([int(mel_input_length.min().item() / 2 - 1)])
-            mel_len_st = int(adj_mels_lengths.min().item() / 2 - 1)
-            st = []
-            gt = []
-            for bib in range(len(adj_mels_lengths)):
-
-                mel_length = int(adj_mels_lengths[bib].item() / 2)
-                random_start = np.random.randint(0, mel_length - mel_len_st)
-                st.append(asr_ref[bib, :, (random_start):((random_start+mel_len_st))])
-
-                mel_length = int(mel_input_length[bib].item() / 2)
-                random_start = np.random.randint(0, mel_length - mel_len)
-                gt.append(asr_real[bib, :, (random_start):((random_start+mel_len))])
-
-            st = torch.stack(st).detach()
-            gt = torch.stack(gt).detach()
-
-            if random.random() < 0.9:
-                st = gt
-                
-            h_cont = model.predictor_encoder(st, (torch.ones(st.size(0)).to(st.device) * st.size(-1)).long())
-        h, commitment_loss, codebook_loss, code = model.quantizer(h_cont)
-        commitment_loss, codebook_loss = commitment_loss.mean(), codebook_loss.mean()
     
-        with torch.no_grad():
-            mel_len = int(mel_input_length.min().item() / 2 - 1)
-            gt = []
-            for bib in range(len(mel_input_length)):
-                mel_length = int(mel_input_length[bib].item() / 2)
-                random_start = np.random.randint(0, mel_length - mel_len)
-                gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
+        try: 
+            with torch.no_grad():
+                mask = length_to_mask(adj_mels_lengths // (2 ** asr_model.n_down)).to('cuda')
+                mel_mask = length_to_mask(adj_mels_lengths).to('cuda')
+                text_mask = length_to_mask(ref_lengths).to(device)#to(ref_texts.device)
+                
+                adj_mels = adj_mels.to(device)
+                ref_texts = ref_texts.to(device)
 
-            gt = torch.stack(gt).detach()
+                _, _, s2s_attn = asr_model(adj_mels, mask, ref_texts)
+                s2s_attn = s2s_attn.transpose(-1, -2)
+                s2s_attn = s2s_attn[..., 1:]
+                s2s_attn = s2s_attn.transpose(-1, -2)
 
-        # bert feature
-        bert_dur = model.bert(texts, attention_mask=(~text_mask).int()).last_hidden_state
-        d_en = model.bert_encoder(bert_dur).transpose(-1, -2) 
+                mask_ST = mask_from_lens(s2s_attn, ref_lengths, adj_mels_lengths // (2 ** asr_model.n_down))
+                s2s_attn_mono = maximum_path(s2s_attn, mask_ST)
 
-#         s, d_en = model.prosody_encoder(gt, d_en, input_lengths, t_en.size(-1))
-        
-#         h = torch.cat([h_cont, s.unsqueeze(-1)], dim=-1)
-        
-        # predict duration
-        d = model.dur_predictor(d_en, h, input_lengths, d_en.size(-1))
-        d.masked_fill_(text_mask.unsqueeze(-1), 0.0)
+                # encode
+                d_gt = s2s_attn_mono.sum(axis=-1).detach()
 
+                real_norm = log_norm(adj_mels.unsqueeze(1)).squeeze(1)
 
-        # predict prosody
-        F0_fake, N_fake = model.pro_predictor((d_en @ s2s_attn_mono), 
-                                              h, 
-                                              mel_input_length // (2 ** asr_model.n_down), 
-                                              s2s_attn_mono.size(-1))
+                F0_real = F0_model(adj_mels.unsqueeze(1), adj_mels_lengths.cpu())
 
-        F0_fake.masked_fill_(mel_mask, 0.0)
-        N_fake.masked_fill_(mel_mask, 0.0)
-        
-        dur = torch.sigmoid(d).sum(axis=-1)
-        dur.masked_fill_(text_mask, 0.0)
-#         d_pred = dur + dur.round().detach() - dur.detach()
-        d_pred = dur
+                real_norm.masked_fill_(mel_mask, 0.0)
+                F0_real.masked_fill_(mel_mask, 0.0)
 
-        dur_real = torch.cat([t_en, 
-                            d_gt.unsqueeze(1)
-                                    ], axis=1)
-        dur_pred = torch.cat([t_en, 
-                            d_pred.unsqueeze(1)
+            position = torch.stack([torch.range(0, ref_texts.size(-1) - 1)] * ref_texts.size(0)).to('cuda')
+            t_en = model.text_embedding(position.long()).transpose(-1, -2)
+
+    #         if np.random.rand() < 0.5:
+    #             asr = (t_en @ s2s_attn)
+    #         else:
+    #             asr = (t_en @ s2s_attn_mono)
+
+            asr = (t_en @ s2s_attn_mono)
+            asr_ref = torch.cat([asr, 
+                                    F.avg_pool1d(real_norm, kernel_size=2).unsqueeze(1), 
+                                    F.avg_pool1d(F0_real, kernel_size=2).unsqueeze(1)
                                     ], axis=1)
 
-        with torch.no_grad():
-            asr_pred = torch.cat([asr, 
-                                 F.avg_pool1d(N_fake, kernel_size=2).unsqueeze(1), 
-                                 F.avg_pool1d(F0_fake, kernel_size=2).unsqueeze(1)
-                                ], axis=1)
-            h_pred = model.predictor_encoder(asr_pred, mel_input_length // 2)
+            with torch.no_grad():
+                mask = length_to_mask(mel_input_length // (2 ** asr_model.n_down)).to('cuda')
+                mel_mask = length_to_mask(mel_input_length).to('cuda')
+                text_mask = length_to_mask(input_lengths).to(device)#to(texts.device)
 
-            loss_sty = F.l1_loss(h_cont.detach(), h_pred)
+                mels = mels.to(device)
+                texts = texts.to(device)
+                
+                _, _, s2s_attn = asr_model(mels, mask, texts)
+                s2s_attn = s2s_attn.transpose(-1, -2)
+                s2s_attn = s2s_attn[..., 1:]
+                s2s_attn = s2s_attn.transpose(-1, -2)
 
+                mask_ST = mask_from_lens(s2s_attn, input_lengths, mel_input_length // (2 ** asr_model.n_down))
+                s2s_attn_mono = maximum_path(s2s_attn, mask_ST)
 
+                # encode
+                d_gt = s2s_attn_mono.sum(axis=-1).detach()
 
-        optimizer.zero_grad()
-        d_loss = dl_p(asr_pred, asr_real, h, mel_input_length, s2s_attn_mono).mean()
-        d_loss += dl_d(dur_pred, dur_real, h, input_lengths, dur_pred).mean()
-        d_loss.backward()
-        optimizer.step('discriminator')
-        optimizer.step('dur_discriminator')
+                real_norm = log_norm(mels.unsqueeze(1)).squeeze(1)
+
+                F0_real = F0_model(mels.unsqueeze(1), mel_input_length.cpu())
+
+                real_norm.masked_fill_(mel_mask, 0.0)
+                F0_real.masked_fill_(mel_mask, 0.0)
+
+            position = torch.stack([torch.range(0, texts.size(-1) - 1)] * texts.size(0)).to('cuda')
+            t_en = model.text_embedding(position.long()).transpose(-1, -2)
+
+    #         if np.random.rand() < 0.5:
+    #             asr = (t_en @ s2s_attn)
+    #         else:
+    #             asr = (t_en @ s2s_attn_mono)
+
+            asr = (t_en @ s2s_attn_mono)
+            asr_real = torch.cat([asr, 
+                                    F.avg_pool1d(real_norm, kernel_size=2).unsqueeze(1), 
+                                    F.avg_pool1d(F0_real, kernel_size=2).unsqueeze(1)
+                                    ], axis=1)
             
-        optimizer.zero_grad()
+            
+            if bool(random.getrandbits(1)):
+    #             # compute prosodic style
+    #             if bool(random.getrandbits(1)):
+    #                 min_length = (adj_mels_lengths // 2).min()
+    #                 asr_new = torch.zeros_like(asr_ref).to(asr_ref.device)
+    #                 bid = 0
+    #                 for a, length in zip (asr_ref, adj_mels_lengths // 2):
+    #                     a = a[:, :length]
+    #                     asr_m = random_mask_tokens(a, min_length)
+    #                     asr_new[bid, :, :length] = asr_m
+    #                     bid += 1
+    #                 h_cont = model.predictor_encoder(asr_ref, adj_mels_lengths // 2)
+    #             else:
+                min_length = (mel_input_length // 2).min()
+                asr_new = torch.zeros_like(asr_real).to(asr_real.device)
+                bid = 0
+                for a, length in zip (asr_real, mel_input_length // 2):
+                    a = a[:, :length]
+                    asr_m = random_mask_tokens(a, min_length)
+                    asr_new[bid, :, :length] = asr_m
+                    bid += 1
+                h_cont = model.predictor_encoder(asr_new, mel_input_length // 2)
+            else:
+                flag = False
+                mel_len = min([int(mel_input_length.min().item() / 2 - 1)])
+                mel_len_st = int(adj_mels_lengths.min().item() / 2 - 1)
+                st = []
+                gt = []
+                for bib in range(len(adj_mels_lengths)):
 
-        loss_s2s = 0
-        loss_algn = 0
-        for _s2s_pred, _text_input, _text_length in zip(d, (d_gt), input_lengths):
-            _s2s_pred = _s2s_pred[:_text_length, :]
-            _text_input = _text_input[:_text_length].long()
-            _s2s_trg = torch.zeros_like(_s2s_pred)
-            for p in range(_s2s_trg.shape[0]):
-                _s2s_trg[p, :_text_input[p]] = 1
-#             _dur_pred = F.relu(torch.sigmoid(_s2s_pred) - 0.5).sum(axis=1) * 2
-            _dur_pred = torch.sigmoid(_s2s_pred).sum(axis=1)
+                    mel_length = int(adj_mels_lengths[bib].item() / 2)
+                    random_start = np.random.randint(0, mel_length - mel_len_st)
+                    st.append(asr_ref[bib, :, (random_start):((random_start+mel_len_st))])
 
-            loss_algn += F.l1_loss(_dur_pred[1:_text_length-1], 
-                                   _text_input[1:_text_length-1])
-            loss_s2s += F.binary_cross_entropy_with_logits(_s2s_pred.flatten(), _s2s_trg.flatten())
+                    mel_length = int(mel_input_length[bib].item() / 2)
+                    random_start = np.random.randint(0, mel_length - mel_len)
+                    gt.append(asr_real[bib, :, (random_start):((random_start+mel_len))])
 
-        loss_s2s /= texts.size(0)
-        loss_s2s *= 20
-        loss_algn /= texts.size(0)
+                st = torch.stack(st).detach()
+                gt = torch.stack(gt).detach()
 
-        loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10 * ((real_norm.size(-1) * batch_size) / (mel_input_length).sum())
-        loss_norm_rec = F.smooth_l1_loss(real_norm, N_fake) * ((real_norm.size(-1) * batch_size) / (mel_input_length).sum())
+                if random.random() < 0.9:
+                    st = gt
+                    
+                h_cont = model.predictor_encoder(st, (torch.ones(st.size(0)).to(st.device) * st.size(-1)).long())
+            h, commitment_loss, codebook_loss, code = model.quantizer(h_cont)
+            commitment_loss, codebook_loss = commitment_loss.mean(), codebook_loss.mean()
+        
+            with torch.no_grad():
+                mel_len = int(mel_input_length.min().item() / 2 - 1)
+                gt = []
+                for bib in range(len(mel_input_length)):
+                    mel_length = int(mel_input_length[bib].item() / 2)
+                    random_start = np.random.randint(0, mel_length - mel_len)
+                    gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
 
-        loss_gen1, loss_fm1 = gl_p(asr_pred, asr_real, h, mel_input_length, s2s_attn_mono)
-        loss_gen2, loss_fm2 = gl_d(dur_pred, dur_real, h, input_lengths, dur_pred)
+                gt = torch.stack(gt).detach()
 
-        loss_gen = (loss_gen1.mean() + loss_gen2.mean())  + (loss_fm1.mean() + loss_fm2.mean())
+            # bert feature
+            bert_dur = model.bert(texts, attention_mask=(~text_mask).int()).last_hidden_state
+            d_en = model.bert_encoder(bert_dur).transpose(-1, -2) 
+
+    #         s, d_en = model.prosody_encoder(gt, d_en, input_lengths, t_en.size(-1))
+            
+    #         h = torch.cat([h_cont, s.unsqueeze(-1)], dim=-1)
+            
+            # predict duration
+            d = model.dur_predictor(d_en, h, input_lengths, d_en.size(-1)).to(device)
+            d.masked_fill_(text_mask.unsqueeze(-1), 0.0)
 
 
-        g_loss = loss_F0_rec + loss_s2s + loss_norm_rec + loss_algn + commitment_loss + codebook_loss + loss_gen + loss_sty # + loss_gen * 0.1
+            # predict prosody
+            F0_fake, N_fake = model.pro_predictor((d_en @ s2s_attn_mono), 
+                                                h, 
+                                                mel_input_length // (2 ** asr_model.n_down), 
+                                                s2s_attn_mono.size(-1))
 
-        g_loss.backward()
+            F0_fake.masked_fill_(mel_mask, 0.0)
+            N_fake.masked_fill_(mel_mask, 0.0)
+            
+            dur = torch.sigmoid(d).sum(axis=-1)
+            dur.masked_fill_(text_mask, 0.0)
+    #         d_pred = dur + dur.round().detach() - dur.detach()
+            d_pred = dur
 
-#         optimizer.step('bert_encoder')
-#         optimizer.step('bert')
-        optimizer.step('dur_predictor')
-        optimizer.step('pro_predictor')
-        optimizer.step('predictor_encoder')
-        optimizer.step('quantizer')
-        optimizer.step('text_embedding')
+            dur_real = torch.cat([t_en, 
+                                d_gt.unsqueeze(1)
+                                        ], axis=1)
+            dur_pred = torch.cat([t_en, 
+                                d_pred.unsqueeze(1)
+                                        ], axis=1)
 
-        running_loss += loss_F0_rec.item()
+            with torch.no_grad():
+                asr_pred = torch.cat([asr, 
+                                    F.avg_pool1d(N_fake, kernel_size=2).unsqueeze(1), 
+                                    F.avg_pool1d(F0_fake, kernel_size=2).unsqueeze(1)
+                                    ], axis=1)
+                h_pred = model.predictor_encoder(asr_pred, mel_input_length // 2)
+
+                loss_sty = F.l1_loss(h_cont.detach(), h_pred)
+
+
+
+            optimizer.zero_grad()
+            d_loss = dl_p(asr_pred, asr_real, h, mel_input_length, s2s_attn_mono).mean()
+            d_loss += dl_d(dur_pred, dur_real, h, input_lengths, dur_pred).mean()
+            d_loss.backward()
+            optimizer.step('discriminator')
+            optimizer.step('dur_discriminator')
                 
-        i += 1
-                
-        iters = iters + 1
-        if (i+1)%log_interval == 0:
-            print ('Epoch [%d/%d], Step [%d/%d], F0 Loss: %.5f, Algn Loss: %.5f, Norm Loss: %.5f, S2S Loss: %.5f, Sty Loss: %.5f, Dis Loss: %.5f, Gen Loss: %.5f, Comm Loss: %.5f'
-                    %(epoch+1, epochs, i+1, len(train_dataloader), running_loss / log_interval, loss_algn, loss_norm_rec, loss_s2s, loss_sty, d_loss, loss_gen, commitment_loss))
-            running_loss = 0
-            print('Time elasped:', time.time()-start_time)
+            optimizer.zero_grad()
+
+            loss_s2s = 0
+            loss_algn = 0
+            for _s2s_pred, _text_input, _text_length in zip(d, (d_gt), input_lengths):
+                _s2s_pred = _s2s_pred[:_text_length, :]
+                _text_input = _text_input[:_text_length].long()
+                _s2s_trg = torch.zeros_like(_s2s_pred)
+                for p in range(_s2s_trg.shape[0]):
+                    _s2s_trg[p, :_text_input[p]] = 1
+    #             _dur_pred = F.relu(torch.sigmoid(_s2s_pred) - 0.5).sum(axis=1) * 2
+                _dur_pred = torch.sigmoid(_s2s_pred).sum(axis=1)
+
+                loss_algn += F.l1_loss(_dur_pred[1:_text_length-1], 
+                                    _text_input[1:_text_length-1])
+                loss_s2s += F.binary_cross_entropy_with_logits(_s2s_pred.flatten(), _s2s_trg.flatten())
+
+            loss_s2s /= texts.size(0)
+            loss_s2s *= 20
+            loss_algn /= texts.size(0)
+
+            loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10 * ((real_norm.size(-1) * batch_size) / (mel_input_length).sum())
+            loss_norm_rec = F.smooth_l1_loss(real_norm, N_fake) * ((real_norm.size(-1) * batch_size) / (mel_input_length).sum())
+
+            loss_gen1, loss_fm1 = gl_p(asr_pred, asr_real, h, mel_input_length, s2s_attn_mono)
+            loss_gen2, loss_fm2 = gl_d(dur_pred, dur_real, h, input_lengths, dur_pred)
+
+            loss_gen = (loss_gen1.mean() + loss_gen2.mean())  + (loss_fm1.mean() + loss_fm2.mean())
+
+
+            g_loss = loss_F0_rec + loss_s2s + loss_norm_rec + loss_algn + commitment_loss + codebook_loss + loss_gen + loss_sty # + loss_gen * 0.1
+
+            g_loss.backward()
+
+    #         optimizer.step('bert_encoder')
+    #         optimizer.step('bert')
+            optimizer.step('dur_predictor')
+            optimizer.step('pro_predictor')
+            optimizer.step('predictor_encoder')
+            optimizer.step('quantizer')
+            optimizer.step('text_embedding')
+
+            running_loss += loss_F0_rec.item()
+                    
+            i += 1
+                    
+            iters = iters + 1
+            if (i+1)%log_interval == 0:
+                print ('Epoch [%d/%d], Step [%d/%d], F0 Loss: %.5f, Algn Loss: %.5f, Norm Loss: %.5f, S2S Loss: %.5f, Sty Loss: %.5f, Dis Loss: %.5f, Gen Loss: %.5f, Comm Loss: %.5f'
+                        %(epoch+1, epochs, i+1, len(train_dataloader), running_loss / log_interval, loss_algn, loss_norm_rec, loss_s2s, loss_sty, d_loss, loss_gen, commitment_loss))
+                running_loss = 0
+                print('Time elasped:', time.time()-start_time)
+        except Exception as e:
+            print(e)
+            
 
 
     loss_test = 0
@@ -3493,6 +3398,7 @@ with torch.no_grad():
     s2s_attn_mono = maximum_path(s2s_attn, mask_ST)
     # encode
     t_en = model.text_encoder(texts, input_lengths, text_mask)
+
     asr = (t_en @ s2s_attn_mono)
     with torch.no_grad():
         F0_down = 7
